@@ -9,3 +9,17 @@ To build:
 ```
 go build
 ```
+
+To cross compile from Windows to Linux and deploy:
+
+```
+set GOARCH=amd64
+set GOOS=linux
+go build
+
+chmod +x ./root
+nohup ./root &
+
+ps -ef | grep -i ./root
+kill [pid]
+```
