@@ -13,10 +13,25 @@ import (
 	"github.com/PeernetOfficial/core"
 )
 
-const configFile = "Settings.yaml"
+const configFile = "Config.yaml"
+
+var config struct {
+	// Statistics web server settings
+	WebListen       []string `yaml:"WebListen"`       // WebListen is in format IP:Port and declares where the web-interface should listen on. IP can also be ommitted to listen on any.
+	UseSSL          bool     `yaml:"UseSSL"`          // Enables SSL.
+	CertificateFile string   `yaml:"CertificateFile"` // This is the certificate received from the CA. This can also include the intermediate certificate from the CA.
+	CertificateKey  string   `yaml:"CertificateKey"`  // This is the private key.
+
+	// HTTP Server Timeouts. Valid units are ms, s, m, h.
+	HTTPTimeoutRead  string `yaml:"HTTPTimeoutRead"`  // The maximum duration for reading the entire request, including the body.
+	HTTPTimeoutWrite string `yaml:"HTTPTimeoutWrite"` // The maximum duration before timing out writes of the response. This includes processing time and is therefore the max time any HTTP function may take.
+
+	// WebFiles is the directory holding all HTML and other files to be served by the server
+	WebFiles string `yaml:"WebFiles"`
+}
 
 func init() {
-	if status, err := core.LoadConfig(configFile); err != nil {
+	if status, err := core.LoadConfigOut(configFile, &config); err != nil {
 		switch status {
 		case 0:
 			fmt.Printf("Unknown error accessing config file '%s': %s", configFile, err.Error())
@@ -40,6 +55,8 @@ func init() {
 }
 
 func main() {
+	startStatisticsWebServer()
+
 	core.Connect()
 
 	userCommands()
