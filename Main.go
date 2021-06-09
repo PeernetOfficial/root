@@ -28,6 +28,9 @@ var config struct {
 
 	// WebFiles is the directory holding all HTML and other files to be served by the server
 	WebFiles string `yaml:"WebFiles"`
+
+	// DatabaseFolder defines where all the database files are stored. Currently they are uncompressed unencrypted CSV files.
+	DatabaseFolder string `yaml:"DatabaseFolder"`
 }
 
 func init() {
@@ -55,6 +58,7 @@ func init() {
 }
 
 func main() {
+	initStatistics()
 	startStatisticsWebServer()
 
 	core.Connect()

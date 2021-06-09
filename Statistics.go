@@ -1,0 +1,206 @@
+/*
+File Name:  Statistics.go
+Copyright:  2021 Peernet Foundation s.r.o.
+Author:     Peter Kleissner
+
+Code to collect the necessary data for creating the KPIs:
+* Daily active peers
+* Full log of new peers
+
+Every 10 second it will write the statistics file. This gives incoming peers some time to connect to both IPv4 and IPv6.
+*/
+
+package main
+
+import (
+	"log"
+	"path"
+	"sync"
+	"time"
+
+	"github.com/PeernetOfficial/core"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/robfig/cron/v3"
+)
+
+const filenameDailySummary = "Daily Active Peers.csv"
+
+type peerStat struct {
+	added         time.Time                            // Added to the list of stats
+	peer          *core.PeerInfo                       // Full peer details
+	peerID        [btcec.PubKeyBytesLenCompressed]byte // Peer ID compressed form
+	isRootPeer    bool                                 // Whether the peer is a trusted root peer.
+	isNAT         bool                                 // Whether the peer is behind a NAT.
+	isPortForward bool                                 // Whether the peer uses a forwarded port.
+	connection4   *core.Connection                     // IPv4 connection
+	connection6   *core.Connection                     // IPv4 connection
+}
+
+const peerWaitTime = 10 // seconds
+
+// Map of all known peer IDs today for deduplication. Resets at midnight.
+var todayPeers map[[btcec.PubKeyBytesLenCompressed]byte]struct{}
+var todayPeersMutex sync.Mutex
+
+func initStatistics() {
+	if config.DatabaseFolder == "" {
+		return
+	}
+
+	todayPeers = make(map[[btcec.PubKeyBytesLenCompressed]byte]struct{})
+
+	// All new peers waiting to be added to the CSV list after the wait time.
+	// Waiting makes sure that both IPv4 and IPv6 connections are recorded.
+	statQueue := make(map[[btcec.PubKeyBytesLenCompressed]byte]*peerStat)
+	var statQueueMutex sync.Mutex
+
+	newRecordsChan := make(chan *peerStat)
+	var newRecordsChanMutex sync.Mutex
+
+	if filename, err := createDailyLog(config.DatabaseFolder, newRecordsChan); err != nil {
+		log.Printf("Error opening daily statistics file '%s': %s\n", filename, err.Error())
+		return
+	}
+
+	summaryDailyFilename := path.Join(config.DatabaseFolder, filenameDailySummary)
+
+	// daily count, to be reset at midnight
+	var countDailyActivePeers, countRootPeers, countNAT, countPortForward uint64
+
+	// TODO: daily count needs to be initialized from old daily log
+
+	// Every midnight create a new database file.
+	c := cron.New(cron.WithLocation(time.UTC))
+	c.AddFunc("0 0 * * *", func() {
+		// write last day into summary file "Daily Active Peers.csv"
+		todayPeersMutex.Lock()
+		todayPeers = make(map[[btcec.PubKeyBytesLenCompressed]byte]struct{})
+		todayPeersMutex.Unlock()
+
+		statWriteSummaryDaily(summaryDailyFilename, countDailyActivePeers, countRootPeers, countNAT, countPortForward)
+
+		// close daily log and create new one
+		newRecordsChanMutex.Lock()
+		close(newRecordsChan)
+		newRecordsChan = make(chan *peerStat)
+		newRecordsChanMutex.Unlock()
+
+		if filename, err := createDailyLog(config.DatabaseFolder, newRecordsChan); err != nil {
+			log.Printf("Error opening daily statistics file '%s' at midnight: %s\n", filename, err.Error())
+		}
+	})
+	c.Start()
+
+	// register the filter to be called each time a new peer is discovered
+	core.Filters.NewPeer = func(peer *core.PeerInfo, connection *core.Connection) {
+		// New peers are added to the wait list, and after 10 seconds written into the file.
+		// This gives peers a little bit of time to connect both via IPv4 and IPv6.
+		peerID := publicKey2Compressed(peer.PublicKey)
+		todayPeersMutex.Lock()
+		_, ok := todayPeers[peerID]
+		todayPeersMutex.Unlock()
+		if ok {
+			return
+		}
+
+		stat := &peerStat{
+			added:      time.Now(),
+			peerID:     peerID,
+			isRootPeer: peer.IsRootPeer,
+			peer:       peer,
+		}
+
+		todayPeers[peerID] = struct{}{}
+		statQueue[peerID] = stat
+	}
+
+	// filter for each new peer connection
+	core.Filters.NewPeerConnection = func(peer *core.PeerInfo, connection *core.Connection) {
+		// process the new connection only if the peers is in queue
+		peerID := publicKey2Compressed(peer.PublicKey)
+		statQueueMutex.Lock()
+		stat, ok := statQueue[peerID]
+		statQueueMutex.Unlock()
+		if !ok {
+			return
+		}
+
+		// match IPv4/IPV6
+		if connection.IsIPv4() && stat.connection4 == nil {
+			stat.connection4 = connection
+		} else if connection.IsIPv6() && stat.connection6 == nil {
+			stat.connection6 = connection
+		}
+	}
+
+	// process the queue every 10 seconds for writeout
+	go func() {
+		for {
+			time.Sleep(time.Second * peerWaitTime)
+
+			threshold := time.Now().Add(-time.Second * peerWaitTime)
+			statQueueMutex.Lock()
+
+			for id, stat := range statQueue {
+				if stat.added.After(threshold) {
+					continue
+				}
+				delete(statQueue, id)
+
+				// process
+				stat.isNAT = (stat.connection4 != nil && stat.connection4.IsBehindNAT()) || (stat.connection6 != nil && stat.connection6.IsBehindNAT())
+				stat.isPortForward = (stat.connection4 != nil && stat.connection4.IsPortForward()) || (stat.connection6 != nil && stat.connection6.IsPortForward())
+
+				// register the counts
+				countDailyActivePeers++
+
+				if stat.isRootPeer {
+					countRootPeers++
+				}
+				if stat.isNAT {
+					countNAT++
+				}
+				if stat.isPortForward {
+					countPortForward++
+				}
+
+				// send as record
+				newRecordsChanMutex.Lock()
+				newRecordsChan <- stat
+				newRecordsChanMutex.Unlock()
+			}
+
+			statQueueMutex.Unlock()
+		}
+	}()
+}
+
+func publicKey2Compressed(publicKey *btcec.PublicKey) [btcec.PubKeyBytesLenCompressed]byte {
+	var key [btcec.PubKeyBytesLenCompressed]byte
+	copy(key[:], publicKey.SerializeCompressed())
+	return key
+}
+
+func (stat *peerStat) Flags() (flags string) {
+	if stat.isRootPeer {
+		flags += "R"
+	}
+
+	if stat.isNAT {
+		flags += "N"
+	}
+
+	if stat.isPortForward {
+		flags += "P"
+	}
+
+	if stat.peer.Features&(1<<core.FeatureIPv4Listen) > 0 {
+		flags += "4"
+	}
+
+	if stat.peer.Features&(1<<core.FeatureIPv6Listen) > 0 {
+		flags += "6"
+	}
+
+	return flags
+}

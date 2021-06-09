@@ -1,6 +1,13 @@
 # Peernet Root Peer
 
-The root peer client is a fork of the command line client. It adds statistics functionality.
+The root peer client is a fork of the command line client. It adds statistics functionality and tracks the following KPIs:
+
+* Daily active peers
+* Weekly active peers [todo]
+* Monthly active peers [todo]
+* Full log of all new peers per day
+
+Peers are counted uniquely based on their public key.
 
 ## Compile
 
@@ -44,6 +51,8 @@ WebListen: ["127.0.0.1:1234","[::1]:1234"]
 UseSSL: true
 CertificateFile: "n.peernet.network-crt.pem"
 CertificateKey: "n.peernet.network-key.pem"
+
+DatabaseFolder: "csv"
 ```
 
 The tool win-acme from https://www.win-acme.com/ can create and renew Let's Encrypt certificates. Note that the certificate is not yet automatically refreshed and a restart of the root process is required upon renewal.

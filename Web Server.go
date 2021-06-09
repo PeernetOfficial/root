@@ -1,5 +1,5 @@
 /*
-File Name:  Web Server Statistics.go
+File Name:  Web Server.go
 Copyright:  2021 Peernet Foundation s.r.o.
 Author:     Peter Kleissner
 */
