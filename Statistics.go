@@ -36,6 +36,14 @@ type peerStat struct {
 	connection6   *core.Connection                     // IPv4 connection
 }
 
+// timeStat is the collection of statistics for a given timeframe (like per day, week, etc.)
+type timeStat struct {
+	countActive      uint64 // Count of active peers
+	countRoot        uint64 // Count of root peers
+	countNAT         uint64 // Count of peers behind a NAT
+	countPortForward uint64 // Count of peers with port forwarding enabled
+}
+
 const peerWaitTime = 10 // seconds
 
 // Map of all known peer IDs today for deduplication. Resets at midnight.
@@ -57,27 +65,29 @@ func initStatistics() {
 	newRecordsChan := make(chan *peerStat)
 	var newRecordsChanMutex sync.Mutex
 
-	if filename, err := createDailyLog(config.DatabaseFolder, newRecordsChan); err != nil {
+	filename, dailyStat, err := createDailyLog(config.DatabaseFolder, newRecordsChan)
+	if err != nil {
 		log.Printf("Error opening daily statistics file '%s': %s\n", filename, err.Error())
 		return
 	}
 
 	summaryDailyFilename := path.Join(config.DatabaseFolder, filenameDailySummary)
 
-	// daily count, to be reset at midnight
-	var countDailyActivePeers, countRootPeers, countNAT, countPortForward uint64
-
-	// TODO: daily count needs to be initialized from old daily log
-
 	// Every midnight create a new database file.
 	c := cron.New(cron.WithLocation(time.UTC))
 	c.AddFunc("0 0 * * *", func() {
 		// write last day into summary file "Daily Active Peers.csv"
+		statWriteSummary(summaryDailyFilename, csvHeaderSummaryDaily, dailyStat)
+
+		// reset daily peer list and counter
 		todayPeersMutex.Lock()
 		todayPeers = make(map[[btcec.PubKeyBytesLenCompressed]byte]struct{})
 		todayPeersMutex.Unlock()
 
-		statWriteSummaryDaily(summaryDailyFilename, countDailyActivePeers, countRootPeers, countNAT, countPortForward)
+		dailyStat.countActive = 0
+		dailyStat.countNAT = 0
+		dailyStat.countPortForward = 0
+		dailyStat.countRoot = 0
 
 		// close daily log and create new one
 		newRecordsChanMutex.Lock()
@@ -85,9 +95,11 @@ func initStatistics() {
 		newRecordsChan = make(chan *peerStat)
 		newRecordsChanMutex.Unlock()
 
-		if filename, err := createDailyLog(config.DatabaseFolder, newRecordsChan); err != nil {
+		if filename, dailyStat, err = createDailyLog(config.DatabaseFolder, newRecordsChan); err != nil {
 			log.Printf("Error opening daily statistics file '%s' at midnight: %s\n", filename, err.Error())
 		}
+
+		// TODO: Process all current connected peers
 	})
 	c.Start()
 
@@ -152,16 +164,16 @@ func initStatistics() {
 				stat.isPortForward = (stat.connection4 != nil && stat.connection4.IsPortForward()) || (stat.connection6 != nil && stat.connection6.IsPortForward())
 
 				// register the counts
-				countDailyActivePeers++
+				dailyStat.countActive++
 
 				if stat.isRootPeer {
-					countRootPeers++
+					dailyStat.countRoot++
 				}
 				if stat.isNAT {
-					countNAT++
+					dailyStat.countNAT++
 				}
 				if stat.isPortForward {
-					countPortForward++
+					dailyStat.countPortForward++
 				}
 
 				// send as record

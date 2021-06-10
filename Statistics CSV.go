@@ -32,15 +32,15 @@ import (
 
 var csvHeaderSummaryDaily = []string{"Date", "Daily Active Peers", "Root Peers", "NAT", "Port Forward"}
 
-// statWriteSummaryDaily writes the daily summary file. It should be called at midnight.
-func statWriteSummaryDaily(filename string, countDailyActivePeers, countRootPeers, countNAT, countPortForward uint64) {
+// statWriteSummary writes a summary file. It should be called at midnight.
+func statWriteSummary(filename string, headerCSV []string, summary timeStat) {
 	stats, err := os.Stat(filename)
 	header := err != nil && os.IsNotExist(err) || err == nil && stats.Size() == 0
 
 	// open the file for writing
 	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
-		log.Printf("Error storing summary file '%s' to record daily active %d, root %d, NAT %d, port forward %d: %s", filename, countDailyActivePeers, countRootPeers, countNAT, countPortForward, err.Error())
+		log.Printf("Error storing summary file '%s'. Active %d, root %d, NAT %d, port forward %d: %s", filename, summary.countActive, summary.countRoot, summary.countNAT, summary.countPortForward, err.Error())
 		return
 	}
 	defer file.Close()
@@ -50,13 +50,13 @@ func statWriteSummaryDaily(filename string, countDailyActivePeers, countRootPeer
 	csvWriter.UseCRLF = true
 
 	if header {
-		csvWriter.Write(csvHeaderSummaryDaily)
+		csvWriter.Write(headerCSV)
 	}
 
 	// write  as CSV record
 	todayA := time.Now().UTC().Round(time.Hour * 24).Format(dateFormat)
 
-	csvWriter.Write([]string{todayA, strconv.FormatUint(countDailyActivePeers, 10), strconv.FormatUint(countRootPeers, 10), strconv.FormatUint(countNAT, 10), strconv.FormatUint(countPortForward, 10)})
+	csvWriter.Write([]string{todayA, strconv.FormatUint(summary.countActive, 10), strconv.FormatUint(summary.countRoot, 10), strconv.FormatUint(summary.countNAT, 10), strconv.FormatUint(summary.countPortForward, 10)})
 	csvWriter.Flush()
 }
 
@@ -68,7 +68,7 @@ var dailyLogMutex sync.Mutex
 
 // createDailyLog creates the daily log file which contains records of all new peers.
 // If the file already exists, it will read it to parse the peer IDs. This means that the serivce can be stopped and started anytime.
-func createDailyLog(directory string, records <-chan *peerStat) (filename string, err error) {
+func createDailyLog(directory string, records <-chan *peerStat) (filename string, readStats timeStat, err error) {
 	dailyLogMutex.Lock()
 	defer dailyLogMutex.Unlock()
 
@@ -82,8 +82,21 @@ func createDailyLog(directory string, records <-chan *peerStat) (filename string
 
 		// read existing file
 		readDailyFile(filename, func(record []string) {
-			if peerID, err := parseDailyLogRecord(record); err == nil {
+			if peerID, flags, err := parseDailyLogRecord(record); err == nil {
 				todayPeers[peerID] = struct{}{}
+
+				readStats.countActive++
+
+				for _, char := range flags {
+					switch char {
+					case 'R':
+						readStats.countRoot++
+					case 'N':
+						readStats.countNAT++
+					case 'P':
+						readStats.countPortForward++
+					}
+				}
 			}
 		})
 
@@ -95,7 +108,7 @@ func createDailyLog(directory string, records <-chan *peerStat) (filename string
 	// open the file for writing
 	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
-		return filename, err
+		return filename, readStats, err
 	}
 
 	// create the CSV writer and write the header
@@ -142,22 +155,24 @@ func createDailyLog(directory string, records <-chan *peerStat) (filename string
 		file.Close()
 	}()
 
-	return filename, nil
+	return filename, readStats, nil
 }
 
-func parseDailyLogRecord(record []string) (peerID [btcec.PubKeyBytesLenCompressed]byte, err error) {
+func parseDailyLogRecord(record []string) (peerID [btcec.PubKeyBytesLenCompressed]byte, flags string, err error) {
 	if len(record) != len(csvHeaderFull) { // skip records with unexpected field count
-		return peerID, errors.New("invalid length")
+		return peerID, "", errors.New("invalid length")
 	}
 
 	peerIDh, err := hex.DecodeString(record[1])
 	if err != nil || len(peerIDh) != btcec.PubKeyBytesLenCompressed {
-		return peerID, errors.New("invalid peer ID")
+		return peerID, "", errors.New("invalid peer ID")
 	}
 
 	copy(peerID[:], peerIDh)
 
-	return peerID, nil
+	flags = record[14]
+
+	return peerID, flags, nil
 }
 
 // readDailyFile reads the daily file and calls the callback with each record
