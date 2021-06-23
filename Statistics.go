@@ -51,6 +51,9 @@ const peerWaitTime = 10 // seconds
 var todayPeers map[[btcec.PubKeyBytesLenCompressed]byte]struct{}
 var todayPeersMutex sync.Mutex
 
+// dailyStat is todays current statistics
+var dailyStat timeStat
+
 // summaryDaily contains all daily records
 var summaryDaily []recordSummaryDaily
 
@@ -69,7 +72,10 @@ func initStatistics() {
 	newRecordsChan := make(chan *peerStat)
 	var newRecordsChanMutex sync.Mutex
 
-	filename, dailyStat, err := createDailyLog(config.DatabaseFolder, newRecordsChan)
+	var err error
+	var filename string
+
+	filename, dailyStat, err = createDailyLog(config.DatabaseFolder, newRecordsChan)
 	if err != nil {
 		log.Printf("Error opening daily statistics file '%s': %s\n", filename, err.Error())
 		return
