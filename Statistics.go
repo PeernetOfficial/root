@@ -71,13 +71,16 @@ func initStatistics() {
 		return
 	}
 
+	// Read the daily summary file.
 	summaryDailyFilename := path.Join(config.DatabaseFolder, filenameDailySummary)
+	summaryDaily, err := statReadSummary(summaryDailyFilename)
 
 	// Every midnight create a new database file.
 	c := cron.New(cron.WithLocation(time.UTC))
 	c.AddFunc("0 0 * * *", func() {
 		// write last day into summary file "Daily Active Peers.csv"
-		statWriteSummary(summaryDailyFilename, csvHeaderSummaryDaily, dailyStat)
+		summaryDaily = append(summaryDaily, recordSummaryDaily{Date: time.Now().UTC().Round(time.Hour * 24), stats: dailyStat})
+		statWriteSummary(summaryDailyFilename, dailyStat)
 
 		// reset daily peer list and counter
 		todayPeersMutex.Lock()
@@ -99,7 +102,8 @@ func initStatistics() {
 			log.Printf("Error opening daily statistics file '%s' at midnight: %s\n", filename, err.Error())
 		}
 
-		// TODO: Process all current connected peers
+		// Process all current connected peers
+		statQueueCurrentPeers()
 	})
 	c.Start()
 
@@ -215,4 +219,22 @@ func (stat *peerStat) Flags() (flags string) {
 	}
 
 	return flags
+}
+
+// statQueueCurrentPeers records all currently connected peers for statistics
+func statQueueCurrentPeers() {
+	if core.Filters.NewPeer == nil || core.Filters.NewPeerConnection == nil {
+		return
+	}
+
+	for _, peer := range core.PeerlistGet() {
+		core.Filters.NewPeer(peer, nil)
+
+		connections := peer.GetConnections(true)
+		connections = append(connections, peer.GetConnections(false)...)
+
+		for _, connection := range connections {
+			core.Filters.NewPeerConnection(peer, connection)
+		}
+	}
 }

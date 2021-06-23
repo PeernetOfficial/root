@@ -32,8 +32,14 @@ import (
 
 var csvHeaderSummaryDaily = []string{"Date", "Daily Active Peers", "Root Peers", "NAT", "Port Forward"}
 
+// recordSummaryDaily is a record in the summarty daily CSV file
+type recordSummaryDaily struct {
+	Date  time.Time
+	stats timeStat
+}
+
 // statWriteSummary writes a summary file. It should be called at midnight.
-func statWriteSummary(filename string, headerCSV []string, summary timeStat) {
+func statWriteSummary(filename string, summary timeStat) {
 	stats, err := os.Stat(filename)
 	header := err != nil && os.IsNotExist(err) || err == nil && stats.Size() == 0
 
@@ -50,14 +56,64 @@ func statWriteSummary(filename string, headerCSV []string, summary timeStat) {
 	csvWriter.UseCRLF = true
 
 	if header {
-		csvWriter.Write(headerCSV)
+		csvWriter.Write(csvHeaderSummaryDaily)
 	}
 
-	// write  as CSV record
+	// write as CSV record
 	todayA := time.Now().UTC().Round(time.Hour * 24).Format(dateFormat)
 
 	csvWriter.Write([]string{todayA, strconv.FormatUint(summary.countActive, 10), strconv.FormatUint(summary.countRoot, 10), strconv.FormatUint(summary.countNAT, 10), strconv.FormatUint(summary.countPortForward, 10)})
 	csvWriter.Flush()
+}
+
+// statReadSummary reads the full summary file.
+func statReadSummary(filename string) (records []recordSummaryDaily, err error) {
+	file, err := os.OpenFile(filename, os.O_RDONLY, 0644)
+	if err != nil {
+		return records, err
+	}
+
+	csvReader := csv.NewReader(file)
+	csvReader.LazyQuotes = true
+	csvReader.Comma = ','
+	csvReader.FieldsPerRecord = -1 // to allow rows with incorrect number of fields which will be skipped
+
+	for {
+		record, err := csvReader.Read()
+		if err != nil {
+			if err == csv.ErrFieldCount {
+			} else if err == io.EOF {
+				return records, nil
+			} else {
+				return records, err
+			}
+		}
+
+		if len(record) != len(csvHeaderSummaryDaily) { // skip records with unexpected field count
+			continue
+		}
+
+		var stat recordSummaryDaily
+
+		// parse the fields
+		if stat.Date, err = time.Parse(dateFormat, record[0]); err != nil {
+			continue
+		}
+		if stat.stats.countActive, err = strconv.ParseUint(record[1], 10, 0); err != nil {
+			continue
+		}
+		if stat.stats.countRoot, err = strconv.ParseUint(record[2], 10, 0); err != nil {
+			continue
+		}
+		if stat.stats.countNAT, err = strconv.ParseUint(record[3], 10, 0); err != nil {
+			continue
+		}
+		if stat.stats.countPortForward, err = strconv.ParseUint(record[4], 10, 0); err != nil {
+			continue
+		}
+
+		records = append(records, stat)
+	}
 }
 
 // ---- full log ----
