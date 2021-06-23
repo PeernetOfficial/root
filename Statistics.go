@@ -44,11 +44,15 @@ type timeStat struct {
 	countPortForward uint64 // Count of peers with port forwarding enabled
 }
 
+// Wait time (for IPv4/IPv6 connections) before writing full peer details into log file.
 const peerWaitTime = 10 // seconds
 
 // Map of all known peer IDs today for deduplication. Resets at midnight.
 var todayPeers map[[btcec.PubKeyBytesLenCompressed]byte]struct{}
 var todayPeersMutex sync.Mutex
+
+// summaryDaily contains all daily records
+var summaryDaily []recordSummaryDaily
 
 func initStatistics() {
 	if config.DatabaseFolder == "" {
@@ -73,7 +77,7 @@ func initStatistics() {
 
 	// Read the daily summary file.
 	summaryDailyFilename := path.Join(config.DatabaseFolder, filenameDailySummary)
-	summaryDaily, err := statReadSummary(summaryDailyFilename)
+	summaryDaily, err = statReadSummary(summaryDailyFilename)
 
 	// Every midnight create a new database file.
 	c := cron.New(cron.WithLocation(time.UTC))

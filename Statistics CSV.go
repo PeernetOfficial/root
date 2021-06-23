@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path"
 	"strconv"
@@ -260,4 +261,19 @@ func readDailyFile(filename string, callback func(record []string)) (err error) 
 
 		callback(record)
 	}
+}
+
+// ---- files served via web server ----
+
+func webStatDailyActive(w http.ResponseWriter, r *http.Request) {
+	csvWriter := csv.NewWriter(w)
+	csvWriter.UseCRLF = true
+
+	csvWriter.Write(csvHeaderSummaryDaily)
+
+	for _, record := range summaryDaily {
+		csvWriter.Write([]string{record.Date.Format(dateFormat), strconv.FormatUint(record.stats.countActive, 10), strconv.FormatUint(record.stats.countRoot, 10), strconv.FormatUint(record.stats.countNAT, 10), strconv.FormatUint(record.stats.countPortForward, 10)})
+	}
+
+	csvWriter.Flush()
 }

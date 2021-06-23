@@ -23,6 +23,7 @@ func startStatisticsWebServer() {
 	router := mux.NewRouter()
 
 	router.Use(middlewareDisableCache())
+	router.HandleFunc("/stat/Daily Active Peers.csv", webStatDailyActive).Methods("GET")
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir(config.WebFiles))).Methods("GET")
 
 	for _, listen := range config.WebListen {
