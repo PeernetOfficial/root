@@ -266,6 +266,8 @@ func readDailyFile(filename string, callback func(record []string)) (err error) 
 // ---- files served via web server ----
 
 func webStatDailyActive(w http.ResponseWriter, r *http.Request) {
+	CacheControlSetHeader(w, true, 10*60) // 10 minutes
+
 	csvWriter := csv.NewWriter(w)
 	csvWriter.UseCRLF = true
 

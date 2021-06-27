@@ -35,6 +35,7 @@ func webStatDailyJSON(w http.ResponseWriter, r *http.Request) {
 
 	stats.Today = jsonStatsDay{Date: time.Now().UTC(), Active: dailyStat.countActive, Root: dailyStat.countRoot, NAT: dailyStat.countNAT, PortForward: dailyStat.countPortForward}
 
+	CacheControlSetHeader(w, true, 60) // 1 minute
 	APIEncodeJSON(w, r, stats)
 }
 

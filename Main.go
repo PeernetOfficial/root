@@ -21,6 +21,7 @@ var config struct {
 	UseSSL          bool     `yaml:"UseSSL"`          // Enables SSL.
 	CertificateFile string   `yaml:"CertificateFile"` // This is the certificate received from the CA. This can also include the intermediate certificate from the CA.
 	CertificateKey  string   `yaml:"CertificateKey"`  // This is the private key.
+	HTTPAccessAllow string   `yaml:"HTTPAccessAllow"` // Sets the Access-Control-Allow-Origin HTTP header required for cross domain access. Specify * for all or URL.
 
 	// HTTP Server Timeouts. Valid units are ms, s, m, h.
 	HTTPTimeoutRead  string `yaml:"HTTPTimeoutRead"`  // The maximum duration for reading the entire request, including the body.
