@@ -2,14 +2,73 @@
 <html>
 
 <head>
-    <title>1.peernet.network</title>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
     <meta name="description" content="Peernet statistics showing live count of peers.">
     <meta name="keywords" content="Peernet root peer statistics">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="stylesheet" href="css/styles.css">
+
+    <title>1.peernet.network</title>
+
 </head>
 
 <body>
-    <h1>Statistics</h1>
-    <p>This site shows statistics collected by the root peer '1.peernet.network'.</p>
+
+    <header class="header">
+        <div class="container content">
+            <h1>Root Peer '1.peernet.network'</h1>
+        </div>
+    </header>
+    <main>
+        <section class="section js-root" data-url-api="/stat/daily.json">
+            <div class="container">
+                <h2>Daily Active Peers</h2>
+                <h3 class="js-active">Todays count: <span class="js-active__total"></span></h3>
+                <div class="chart-container js-chart-loader">
+                    <canvas class="chart chart--daily js-chart-daily"></canvas>
+                    <div class="chart-container__loader">
+                        <div class="lds-spinner">
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                        </div>
+                    </div>
+                </div>
+                <h2>Daily Peers per Special Category</h2>
+                <div class="chart-container js-chart-loader">
+                    <canvas class="chart js-chart-kpi"></canvas>
+                    <div class="chart-container__loader ">
+                        <div class="lds-spinner">
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                            <div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="js/main.js"></script>
 </body>
 
 </html>
