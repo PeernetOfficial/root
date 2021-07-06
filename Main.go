@@ -14,6 +14,7 @@ import (
 )
 
 const configFile = "Config.yaml"
+const appName = "Peernet Root"
 
 var config struct {
 	// Statistics web server settings
@@ -32,6 +33,9 @@ var config struct {
 
 	// DatabaseFolder defines where all the database files are stored. Currently they are uncompressed unencrypted CSV files.
 	DatabaseFolder string `yaml:"DatabaseFolder"`
+
+	// Log settings
+	ErrorOutput int `yaml:"ErrorOutput"` // 0 = Log file (default),  1 = Command line, 2 = Log file + command line, 3 = None
 }
 
 func init() {
@@ -54,8 +58,10 @@ func init() {
 		os.Exit(1)
 	}
 
+	core.UserAgent = appName + "/" + core.Version
+	core.Filters.LogError = logError
+
 	core.Init()
-	core.UserAgent = "Peernet Root/" + core.Version
 }
 
 func main() {
