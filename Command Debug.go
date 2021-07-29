@@ -34,11 +34,11 @@ func debugCmdConnect(nodeID []byte) {
 		// Discovery via DHT.
 		_, peer, _ = core.FindNode(nodeID, time.Second*10)
 		if peer == nil {
-			fmt.Printf("Not found via DHT :(\n")
+			fmt.Printf("* Not found via DHT :(\n")
 			return
 		}
 
-		fmt.Printf("Successfully discovered via DHT.\n")
+		fmt.Printf("* Successfully discovered via DHT.\n")
 	}
 
 	// virtual peer?
@@ -53,10 +53,13 @@ func debugCmdConnect(nodeID []byte) {
 	//fmt.Printf("* Sending ping:\n")
 }
 
+// ---- filter for outgoing DHT searches ----
+
 // debug output of monitored keys searched in the DHT
 
 var monitorKeys map[string]struct{}
 var monitorKeysMutex sync.RWMutex
+var enableMonitorAll = false // Enables output for all searches. Otherwise it only monitors searches stored in monitorKeys.
 
 func addKeyMonitor(key []byte) {
 	monitorKeysMutex.Lock()
@@ -72,11 +75,13 @@ func removeKeyMonitor(key []byte) {
 
 func filterSearchStatus(client *dht.SearchClient, function, format string, v ...interface{}) {
 	// check if the search client is actively being monitored
-	monitorKeysMutex.Lock()
-	_, ok := monitorKeys[string(client.Key)]
-	monitorKeysMutex.Unlock()
-	if !ok {
-		return
+	if !enableMonitorAll {
+		monitorKeysMutex.Lock()
+		_, ok := monitorKeys[string(client.Key)]
+		monitorKeysMutex.Unlock()
+		if !ok {
+			return
+		}
 	}
 
 	keyA := client.Key
@@ -85,9 +90,39 @@ func filterSearchStatus(client *dht.SearchClient, function, format string, v ...
 	}
 
 	intend := " ->"
-	if function == "sendInfoRequest" {
+
+	switch function {
+	case "search.sendInfoRequest":
 		intend = "    >"
+	case "dht.FindNode", "dht.Get", "dht.Store":
+		intend = " -"
+	case "search.startSearch":
+		intend = "  >"
 	}
 
-	fmt.Printf(intend+" ["+function+" "+hex.EncodeToString(keyA)+"] "+format, v...)
+	fmt.Printf(intend+" "+function+" ["+hex.EncodeToString(keyA)+"] "+format, v...)
+}
+
+// ---- filter for incoming information requests ----
+
+var enableWatchIncomingAll = false
+
+func filterIncomingRequest(peer *core.PeerInfo, Action int, Key []byte, Info interface{}) {
+	if !enableWatchIncomingAll {
+		return
+	}
+
+	requestType := "UNKNOWN"
+	switch Action {
+	case core.ActionFindSelf:
+		requestType = "FIND_SELF"
+	case core.ActionFindPeer:
+		requestType = "FIND_PEER"
+	case core.ActionFindValue:
+		requestType = "FIND_VALUE"
+	case core.ActionInfoStore:
+		requestType = "INFO_STORE"
+	}
+
+	fmt.Printf("Incoming info request %s from %s for key %s\n", requestType, hex.EncodeToString(peer.NodeID), hex.EncodeToString(Key))
 }
