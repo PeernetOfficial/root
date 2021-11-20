@@ -19,7 +19,8 @@ import (
 	"time"
 
 	"github.com/PeernetOfficial/core"
-	"github.com/btcsuite/btcd/btcec"
+	"github.com/PeernetOfficial/core/btcec"
+	"github.com/PeernetOfficial/core/protocol"
 	"github.com/robfig/cron/v3"
 )
 
@@ -220,12 +221,16 @@ func (stat *peerStat) Flags() (flags string) {
 		flags += "P"
 	}
 
-	if stat.peer.Features&(1<<core.FeatureIPv4Listen) > 0 {
+	if stat.peer.Features&(1<<protocol.FeatureIPv4Listen) > 0 {
 		flags += "4"
 	}
 
-	if stat.peer.Features&(1<<core.FeatureIPv6Listen) > 0 {
+	if stat.peer.Features&(1<<protocol.FeatureIPv6Listen) > 0 {
 		flags += "6"
+	}
+
+	if stat.peer.Features&(1<<protocol.FeatureFirewall) > 0 {
+		flags += "F"
 	}
 
 	return flags
