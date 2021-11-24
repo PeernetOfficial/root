@@ -31,7 +31,7 @@ import (
 
 // ---- daily summary file ----
 
-var csvHeaderSummaryDaily = []string{"Date", "Daily Active Peers", "Root Peers", "NAT", "Port Forward"}
+var csvHeaderSummaryDaily = []string{"Date", "Daily Active Peers", "Root Peers", "NAT", "Port Forward", "Firewall"}
 
 // recordSummaryDaily is a record in the summarty daily CSV file
 type recordSummaryDaily struct {
@@ -47,7 +47,7 @@ func statWriteSummary(filename string, summary timeStat) {
 	// open the file for writing
 	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
-		log.Printf("Error storing summary file '%s'. Active %d, root %d, NAT %d, port forward %d: %s", filename, summary.countActive, summary.countRoot, summary.countNAT, summary.countPortForward, err.Error())
+		log.Printf("Error storing summary file '%s'. Active %d, root %d, NAT %d, port forward %d, firewall %d: %s", filename, summary.countActive, summary.countRoot, summary.countNAT, summary.countPortForward, summary.countFirewall, err.Error())
 		return
 	}
 	defer file.Close()
@@ -63,7 +63,7 @@ func statWriteSummary(filename string, summary timeStat) {
 	// write as CSV record
 	todayA := time.Now().UTC().Round(time.Hour * 24).Format(dateFormat)
 
-	csvWriter.Write([]string{todayA, strconv.FormatUint(summary.countActive, 10), strconv.FormatUint(summary.countRoot, 10), strconv.FormatUint(summary.countNAT, 10), strconv.FormatUint(summary.countPortForward, 10)})
+	csvWriter.Write([]string{todayA, strconv.FormatUint(summary.countActive, 10), strconv.FormatUint(summary.countRoot, 10), strconv.FormatUint(summary.countNAT, 10), strconv.FormatUint(summary.countPortForward, 10), strconv.FormatUint(summary.countFirewall, 10)})
 	csvWriter.Flush()
 }
 
@@ -112,6 +112,9 @@ func statReadSummary(filename string) (records []recordSummaryDaily, err error) 
 		if stat.stats.countPortForward, err = strconv.ParseUint(record[4], 10, 0); err != nil {
 			continue
 		}
+		if stat.stats.countFirewall, err = strconv.ParseUint(record[5], 10, 0); err != nil {
+			continue
+		}
 
 		records = append(records, stat)
 	}
@@ -152,6 +155,8 @@ func createDailyLog(directory string, records <-chan *peerStat) (filename string
 						readStats.countNAT++
 					case 'P':
 						readStats.countPortForward++
+					case 'F':
+						readStats.countFirewall++
 					}
 				}
 			}
@@ -274,7 +279,7 @@ func webStatDailyActive(w http.ResponseWriter, r *http.Request) {
 	csvWriter.Write(csvHeaderSummaryDaily)
 
 	for _, record := range summaryDaily {
-		csvWriter.Write([]string{record.Date.Format(dateFormat), strconv.FormatUint(record.stats.countActive, 10), strconv.FormatUint(record.stats.countRoot, 10), strconv.FormatUint(record.stats.countNAT, 10), strconv.FormatUint(record.stats.countPortForward, 10)})
+		csvWriter.Write([]string{record.Date.Format(dateFormat), strconv.FormatUint(record.stats.countActive, 10), strconv.FormatUint(record.stats.countRoot, 10), strconv.FormatUint(record.stats.countNAT, 10), strconv.FormatUint(record.stats.countPortForward, 10), strconv.FormatUint(record.stats.countFirewall, 10)})
 	}
 
 	csvWriter.Flush()

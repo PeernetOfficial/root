@@ -24,16 +24,17 @@ type jsonStatsDay struct {
 	Root        uint64    `json:"root"`        // Count of root peers
 	NAT         uint64    `json:"nat"`         // Count of peers behind a NAT
 	PortForward uint64    `json:"portforward"` // Count of peers with port forwarding enabled
+	Firewall    uint64    `json:"firewall"`    // Count of peers reported behind a firewall
 }
 
 func webStatDailyJSON(w http.ResponseWriter, r *http.Request) {
 	var stats jsonStatistics
 
 	for _, record := range summaryDaily {
-		stats.Daily = append(stats.Daily, jsonStatsDay{Date: record.Date, Active: record.stats.countActive, Root: record.stats.countRoot, NAT: record.stats.countNAT, PortForward: record.stats.countPortForward})
+		stats.Daily = append(stats.Daily, jsonStatsDay{Date: record.Date, Active: record.stats.countActive, Root: record.stats.countRoot, NAT: record.stats.countNAT, PortForward: record.stats.countPortForward, Firewall: record.stats.countFirewall})
 	}
 
-	stats.Today = jsonStatsDay{Date: time.Now().UTC(), Active: dailyStat.countActive, Root: dailyStat.countRoot, NAT: dailyStat.countNAT, PortForward: dailyStat.countPortForward}
+	stats.Today = jsonStatsDay{Date: time.Now().UTC(), Active: dailyStat.countActive, Root: dailyStat.countRoot, NAT: dailyStat.countNAT, PortForward: dailyStat.countPortForward, Firewall: dailyStat.countFirewall}
 
 	CacheControlSetHeader(w, true, 60) // 1 minute
 	APIEncodeJSON(w, r, stats)

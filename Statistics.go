@@ -33,6 +33,7 @@ type peerStat struct {
 	isRootPeer    bool                                 // Whether the peer is a trusted root peer.
 	isNAT         bool                                 // Whether the peer is behind a NAT.
 	isPortForward bool                                 // Whether the peer uses a forwarded port.
+	isFirewall    bool                                 // Reported to be behind a firewall
 	connection4   *core.Connection                     // IPv4 connection
 	connection6   *core.Connection                     // IPv4 connection
 }
@@ -43,6 +44,7 @@ type timeStat struct {
 	countRoot        uint64 // Count of root peers
 	countNAT         uint64 // Count of peers behind a NAT
 	countPortForward uint64 // Count of peers with port forwarding enabled
+	countFirewall    uint64 // Count of peers reported behind a firewall
 }
 
 // Wait time (for IPv4/IPv6 connections) before writing full peer details into log file.
@@ -102,6 +104,7 @@ func initStatistics() {
 		dailyStat.countNAT = 0
 		dailyStat.countPortForward = 0
 		dailyStat.countRoot = 0
+		dailyStat.countFirewall = 0
 
 		// close daily log and create new one
 		newRecordsChanMutex.Lock()
@@ -177,6 +180,7 @@ func initStatistics() {
 				// process
 				stat.isNAT = (stat.connection4 != nil && stat.connection4.IsBehindNAT()) || (stat.connection6 != nil && stat.connection6.IsBehindNAT())
 				stat.isPortForward = (stat.connection4 != nil && stat.connection4.IsPortForward()) || (stat.connection6 != nil && stat.connection6.IsPortForward())
+				stat.isFirewall = stat.peer.IsFirewallReported()
 
 				// register the counts
 				dailyStat.countActive++
@@ -189,6 +193,9 @@ func initStatistics() {
 				}
 				if stat.isPortForward {
 					dailyStat.countPortForward++
+				}
+				if stat.isFirewall {
+					dailyStat.countFirewall++
 				}
 
 				// send as record
