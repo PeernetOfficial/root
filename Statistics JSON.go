@@ -7,10 +7,10 @@ Author:     Peter Kleissner
 package main
 
 import (
-	"encoding/json"
-	"log"
 	"net/http"
 	"time"
+
+	"github.com/PeernetOfficial/core/webapi"
 )
 
 type jsonStatistics struct {
@@ -37,17 +37,28 @@ func webStatDailyJSON(w http.ResponseWriter, r *http.Request) {
 	stats.Today = jsonStatsDay{Date: time.Now().UTC(), Active: dailyStat.countActive, Root: dailyStat.countRoot, NAT: dailyStat.countNAT, PortForward: dailyStat.countPortForward, Firewall: dailyStat.countFirewall}
 
 	CacheControlSetHeader(w, true, 60) // 1 minute
-	APIEncodeJSON(w, r, stats)
+	webapi.EncodeJSON(w, r, stats)
 }
 
-// APIEncodeJSON writes JSON data
-func APIEncodeJSON(w http.ResponseWriter, r *http.Request, data interface{}) (err error) {
-	w.Header().Set("Content-Type", "application/json")
+type jsonStatsToday struct {
+	Date time.Time `json:"date"` // Date
+	// Peer Counts
+	Active      uint64 `json:"active"`      // Count of active peers
+	Root        uint64 `json:"root"`        // Count of root peers
+	NAT         uint64 `json:"nat"`         // Count of peers behind a NAT
+	PortForward uint64 `json:"portforward"` // Count of peers with port forwarding enabled
+	Firewall    uint64 `json:"firewall"`    // Count of peers reported behind a firewall
+	// File Statistics
+	FilesShared uint64 `json:"filesshared"` // Count of files shared across all blockchains
+	ContentSize uint64 `json:"contentsize"` // Total size of shared content in bytes across all blockchains
+}
 
-	err = json.NewEncoder(w).Encode(data)
-	if err != nil {
-		log.Printf("Error writing data for route '%s': %v\n", r.URL.Path, err)
-	}
+func webStatTodayJSON(w http.ResponseWriter, r *http.Request) {
+	stats := jsonStatsToday{Date: time.Now().UTC(), Active: dailyStat.countActive, Root: dailyStat.countRoot, NAT: dailyStat.countNAT, PortForward: dailyStat.countPortForward, Firewall: dailyStat.countFirewall}
 
-	return err
+	stats.FilesShared = 1234 // Test
+	stats.ContentSize = 5678 // Test
+
+	CacheControlSetHeader(w, true, 60) // 1 minute
+	webapi.EncodeJSON(w, r, stats)
 }

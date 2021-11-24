@@ -28,6 +28,8 @@ func startStatisticsWebServer() {
 	router.HandleFunc("/stat/Daily Active Peers.csv", webStatDailyActive).Methods("GET")
 	router.HandleFunc("/stat/daily.json", webStatDailyJSON).Methods("GET")
 	router.HandleFunc("/stat/daily.json", CrossSiteOptionsResponse).Methods("OPTIONS")
+	router.HandleFunc("/stat/today.json", webStatTodayJSON).Methods("GET")
+	router.HandleFunc("/stat/today.json", CrossSiteOptionsResponse).Methods("OPTIONS")
 
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir(config.WebFiles))).Methods("GET")
 
