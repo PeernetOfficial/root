@@ -44,6 +44,7 @@ func showHelp(output io.Writer) {
 		"warehouse store               Store data into local warehouse\n"+
 		"dht get                       Get data via DHT by hash\n"+
 		"dht store                     Store data into DHT\n"+
+		"get block                     Get block from remote peer\n"+
 		"log error                     Set error log output\n"+
 		"\n")
 }
@@ -95,7 +96,7 @@ func userCommands(input io.Reader, output io.Writer, terminateSignal chan struct
 				}
 				userAgent := strings.ToValidUTF8(peer.UserAgent, "?")
 
-				fmt.Fprintf(output, "* Peer ID %s%s\n  Node ID %s\n  User Agent: %s\n\n%s\n  Packets sent:      %d\n  Packets received:  %d\n\n", hex.EncodeToString(peer.PublicKey.SerializeCompressed()), info, hex.EncodeToString(peer.NodeID), userAgent, textPeerConnections(peer), peer.StatsPacketSent, peer.StatsPacketReceived)
+				fmt.Fprintf(output, "* Peer ID %s%s\n  Node ID %s\n  User Agent: %s\n  Blockchain: height %d, version %d\n\n%s\n  Packets sent:      %d\n  Packets received:  %d\n\n", hex.EncodeToString(peer.PublicKey.SerializeCompressed()), info, hex.EncodeToString(peer.NodeID), userAgent, peer.BlockchainHeight, peer.BlockchainVersion, textPeerConnections(peer), peer.StatsPacketSent, peer.StatsPacketReceived)
 			}
 
 		case "chat all", "chat":
@@ -400,6 +401,45 @@ func userCommands(input io.Reader, output io.Writer, terminateSignal chan struct
 			}
 
 			go transferCompareFile(peer, fileHash)
+
+		case "get block":
+			fmt.Fprintf(output, "Enter peer ID or node ID:\n")
+			nodeIDA, _, terminate := getUserOptionString(reader, terminateSignal)
+			if terminate {
+				return
+			}
+			fmt.Fprintf(output, "Enter block number:\n")
+			blockNumber, _, terminate := getUserOptionInt(reader, terminateSignal)
+			if terminate {
+				return
+			}
+
+			nodeID, valid2 := webapi.DecodeBlake3Hash(nodeIDA)
+			publicKey, err3 := core.PublicKeyFromPeerID(nodeIDA)
+
+			if !valid2 && err3 != nil {
+				fmt.Fprintf(output, "Invalid peer ID or node ID.\n")
+				break
+			} else if blockNumber < 0 {
+				fmt.Fprintf(output, "Invalid block number.\n")
+			}
+
+			var peer *core.PeerInfo
+			var err error
+			timeout := time.Second * 10
+
+			if valid2 {
+				peer, err = webapi.PeerConnectNode(nodeID, timeout)
+			} else if err3 == nil {
+				peer, err = webapi.PeerConnectPublicKey(publicKey, timeout)
+			}
+			if err != nil {
+				fmt.Fprintf(output, "Could not connect to peer: %s\n", err.Error())
+				break
+			}
+
+			go blockTransfer(peer, uint64(blockNumber))
+
 		}
 	}
 }
