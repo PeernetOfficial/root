@@ -3,7 +3,7 @@ module github.com/PeernetOfficial/root
 go 1.17
 
 require (
-	github.com/PeernetOfficial/core v0.0.0-20211208031904-4aa15d6a7853
+	github.com/PeernetOfficial/core v0.0.0-20211211194338-c12b68c35cb8
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.1-0.20200912192056-d07530f46e1e
 	github.com/gorilla/websocket v1.4.3-0.20210424162022-e8629af678b7
@@ -14,6 +14,7 @@ require (
 require (
 	github.com/akrylysov/pogreb v0.10.1 // indirect
 	github.com/aybabtme/rgbterm v0.0.0-20170906152045-cc83f3b3ce59 // indirect
+	github.com/enfipy/locker v1.1.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
