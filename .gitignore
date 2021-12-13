@@ -4,3 +4,4 @@ log.txt
 *.yaml
 root
 csv
+data/

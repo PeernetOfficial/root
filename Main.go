@@ -87,14 +87,16 @@ func init() {
 
 	userAgent := appName + "/" + core.Version
 
-	core.Init(userAgent)
+	backend = core.Init(userAgent)
 }
+
+var backend *core.Backend
 
 func main() {
 	initStatistics()
 	startStatisticsWebServer()
 
-	startAPI()
+	startAPI(backend)
 
 	core.Connect()
 

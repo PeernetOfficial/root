@@ -11,18 +11,19 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/PeernetOfficial/core"
 	"github.com/PeernetOfficial/core/webapi"
 	"github.com/gorilla/websocket"
 )
 
-func startAPI() {
+func startAPI(backend *core.Backend) {
 	if len(config.APIListen) == 0 {
 		return
 	}
 
-	webapi.Start(config.APIListen, config.APIUseSSL, config.APICertificateFile, config.APICertificateKey, parseDuration(config.APITimeoutRead), parseDuration(config.APITimeoutWrite), config.APIKey)
+	api := webapi.Start(backend, config.APIListen, config.APIUseSSL, config.APICertificateFile, config.APICertificateKey, parseDuration(config.APITimeoutRead), parseDuration(config.APITimeoutWrite), config.APIKey)
 
-	webapi.Router.HandleFunc("/console", apiConsole).Methods("GET")
+	api.Router.HandleFunc("/console", apiConsole).Methods("GET")
 }
 
 /*
