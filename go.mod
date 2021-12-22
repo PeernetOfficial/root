@@ -3,7 +3,7 @@ module github.com/PeernetOfficial/root
 go 1.17
 
 require (
-	github.com/PeernetOfficial/core v0.0.0-20211213031602-388343dc3eb3
+	github.com/PeernetOfficial/core v0.0.0-20211214164859-ade13d6422da
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.1-0.20200912192056-d07530f46e1e
 	github.com/gorilla/websocket v1.4.3-0.20210424162022-e8629af678b7
@@ -12,6 +12,7 @@ require (
 )
 
 require (
+	github.com/IncSW/geoip2 v0.1.1 // indirect
 	github.com/akrylysov/pogreb v0.10.1 // indirect
 	github.com/aybabtme/rgbterm v0.0.0-20170906152045-cc83f3b3ce59 // indirect
 	github.com/enfipy/locker v1.1.0 // indirect

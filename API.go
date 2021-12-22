@@ -23,6 +23,10 @@ func startAPI(backend *core.Backend) {
 
 	api := webapi.Start(backend, config.APIListen, config.APIUseSSL, config.APICertificateFile, config.APICertificateKey, parseDuration(config.APITimeoutRead), parseDuration(config.APITimeoutWrite), config.APIKey)
 
+	api.InitGeoIPDatabase(config.GeoIPDatabase)
+
+	api.AllowKeyInParam = append(api.AllowKeyInParam, "/console")
+
 	api.Router.HandleFunc("/console", apiConsole).Methods("GET")
 }
 
