@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/PeernetOfficial/core"
 	"github.com/PeernetOfficial/core/webapi"
 )
 
@@ -27,17 +28,19 @@ type jsonStatsDay struct {
 	Firewall    uint64    `json:"firewall"`    // Count of peers reported behind a firewall
 }
 
-func webStatDailyJSON(w http.ResponseWriter, r *http.Request) {
-	var stats jsonStatistics
+func webStatDailyJSON(backend *core.Backend) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var stats jsonStatistics
 
-	for _, record := range summaryDaily {
-		stats.Daily = append(stats.Daily, jsonStatsDay{Date: record.Date, Active: record.stats.countActive, Root: record.stats.countRoot, NAT: record.stats.countNAT, PortForward: record.stats.countPortForward, Firewall: record.stats.countFirewall})
+		for _, record := range summaryDaily {
+			stats.Daily = append(stats.Daily, jsonStatsDay{Date: record.Date, Active: record.stats.countActive, Root: record.stats.countRoot, NAT: record.stats.countNAT, PortForward: record.stats.countPortForward, Firewall: record.stats.countFirewall})
+		}
+
+		stats.Today = jsonStatsDay{Date: time.Now().UTC(), Active: dailyStat.countActive, Root: dailyStat.countRoot, NAT: dailyStat.countNAT, PortForward: dailyStat.countPortForward, Firewall: dailyStat.countFirewall}
+
+		CacheControlSetHeader(w, true, 60) // 1 minute
+		webapi.EncodeJSON(backend, w, r, stats)
 	}
-
-	stats.Today = jsonStatsDay{Date: time.Now().UTC(), Active: dailyStat.countActive, Root: dailyStat.countRoot, NAT: dailyStat.countNAT, PortForward: dailyStat.countPortForward, Firewall: dailyStat.countFirewall}
-
-	CacheControlSetHeader(w, true, 60) // 1 minute
-	webapi.EncodeJSON(w, r, stats)
 }
 
 type jsonStatsToday struct {
@@ -53,12 +56,14 @@ type jsonStatsToday struct {
 	ContentSize uint64 `json:"contentsize"` // Total size of shared content in bytes across all blockchains
 }
 
-func webStatTodayJSON(w http.ResponseWriter, r *http.Request) {
-	stats := jsonStatsToday{Date: time.Now().UTC(), Active: dailyStat.countActive, Root: dailyStat.countRoot, NAT: dailyStat.countNAT, PortForward: dailyStat.countPortForward, Firewall: dailyStat.countFirewall}
+func webStatTodayJSON(backend *core.Backend) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		stats := jsonStatsToday{Date: time.Now().UTC(), Active: dailyStat.countActive, Root: dailyStat.countRoot, NAT: dailyStat.countNAT, PortForward: dailyStat.countPortForward, Firewall: dailyStat.countFirewall}
 
-	stats.FilesShared = 1234 // Test
-	stats.ContentSize = 5678 // Test
+		stats.FilesShared = 1234 // Test
+		stats.ContentSize = 5678 // Test
 
-	CacheControlSetHeader(w, true, 60) // 1 minute
-	webapi.EncodeJSON(w, r, stats)
+		CacheControlSetHeader(w, true, 60) // 1 minute
+		webapi.EncodeJSON(backend, w, r, stats)
+	}
 }

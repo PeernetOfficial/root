@@ -13,10 +13,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/PeernetOfficial/core"
 	"github.com/gorilla/mux"
 )
 
-func startStatisticsWebServer() {
+func startStatisticsWebServer(backend *core.Backend) {
 	if len(config.WebListen) == 0 {
 		return
 	}
@@ -26,9 +27,9 @@ func startStatisticsWebServer() {
 	router.Use(HeadersMiddleware(config.HTTPAccessAllow, config.UseSSL))
 
 	router.HandleFunc("/stat/Daily Active Peers.csv", webStatDailyActive).Methods("GET")
-	router.HandleFunc("/stat/daily.json", webStatDailyJSON).Methods("GET")
+	router.HandleFunc("/stat/daily.json", webStatDailyJSON(backend)).Methods("GET")
 	router.HandleFunc("/stat/daily.json", CrossSiteOptionsResponse).Methods("OPTIONS")
-	router.HandleFunc("/stat/today.json", webStatTodayJSON).Methods("GET")
+	router.HandleFunc("/stat/today.json", webStatTodayJSON(backend)).Methods("GET")
 	router.HandleFunc("/stat/today.json", CrossSiteOptionsResponse).Methods("OPTIONS")
 
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir(config.WebFiles))).Methods("GET")

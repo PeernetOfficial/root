@@ -60,7 +60,7 @@ var dailyStat timeStat
 // summaryDaily contains all daily records
 var summaryDaily []recordSummaryDaily
 
-func initStatistics() {
+func initStatistics(backend *core.Backend) {
 	if config.DatabaseFolder == "" {
 		return
 	}
@@ -117,12 +117,12 @@ func initStatistics() {
 		}
 
 		// Process all current connected peers
-		statQueueCurrentPeers()
+		statQueueCurrentPeers(backend)
 	})
 	c.Start()
 
 	// register the filter to be called each time a new peer is discovered
-	core.Filters.NewPeer = func(peer *core.PeerInfo, connection *core.Connection) {
+	backend.Filters.NewPeer = func(peer *core.PeerInfo, connection *core.Connection) {
 		// New peers are added to the wait list, and after 10 seconds written into the file.
 		// This gives peers a little bit of time to connect both via IPv4 and IPv6.
 		peerID := publicKey2Compressed(peer.PublicKey)
@@ -145,7 +145,7 @@ func initStatistics() {
 	}
 
 	// filter for each new peer connection
-	core.Filters.NewPeerConnection = func(peer *core.PeerInfo, connection *core.Connection) {
+	backend.Filters.NewPeerConnection = func(peer *core.PeerInfo, connection *core.Connection) {
 		// process the new connection only if the peers is in queue
 		peerID := publicKey2Compressed(peer.PublicKey)
 		statQueueMutex.Lock()
@@ -244,19 +244,19 @@ func (stat *peerStat) Flags() (flags string) {
 }
 
 // statQueueCurrentPeers records all currently connected peers for statistics
-func statQueueCurrentPeers() {
-	if core.Filters.NewPeer == nil || core.Filters.NewPeerConnection == nil {
+func statQueueCurrentPeers(backend *core.Backend) {
+	if backend.Filters.NewPeer == nil || backend.Filters.NewPeerConnection == nil {
 		return
 	}
 
-	for _, peer := range core.PeerlistGet() {
-		core.Filters.NewPeer(peer, nil)
+	for _, peer := range backend.PeerlistGet() {
+		backend.Filters.NewPeer(peer, nil)
 
 		connections := peer.GetConnections(true)
 		connections = append(connections, peer.GetConnections(false)...)
 
 		for _, connection := range connections {
-			core.Filters.NewPeerConnection(peer, connection)
+			backend.Filters.NewPeerConnection(peer, connection)
 		}
 	}
 }
