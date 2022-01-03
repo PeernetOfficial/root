@@ -60,8 +60,12 @@ func webStatTodayJSON(backend *core.Backend) func(w http.ResponseWriter, r *http
 	return func(w http.ResponseWriter, r *http.Request) {
 		stats := jsonStatsToday{Date: time.Now().UTC(), Active: dailyStat.countActive, Root: dailyStat.countRoot, NAT: dailyStat.countNAT, PortForward: dailyStat.countPortForward, Firewall: dailyStat.countFirewall}
 
-		stats.FilesShared = 1234 // Test
-		stats.ContentSize = 5678 // Test
+		globalBlockchainStats.Lock()
+
+		stats.FilesShared = globalBlockchainStats.CountFileRecords
+		stats.ContentSize = globalBlockchainStats.SizeAllFiles
+
+		globalBlockchainStats.Unlock()
 
 		CacheControlSetHeader(w, true, 60) // 1 minute
 		webapi.EncodeJSON(backend, w, r, stats)

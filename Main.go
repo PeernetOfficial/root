@@ -70,15 +70,17 @@ func main() {
 	userAgent := appName + "/" + core.Version
 
 	filters := &core.Filters{
-		LogError:               logError,
-		DHTSearchStatus:        filterSearchStatus,
-		IncomingRequest:        filterIncomingRequest,
-		MessageIn:              filterMessageIn,
-		MessageOutAnnouncement: filterMessageOutAnnouncement,
-		MessageOutResponse:     filterMessageOutResponse,
-		MessageOutTraverse:     filterMessageOutTraverse,
-		MessageOutPing:         filterMessageOutPing,
-		MessageOutPong:         filterMessageOutPong,
+		LogError:                       logError,
+		DHTSearchStatus:                filterSearchStatus,
+		IncomingRequest:                filterIncomingRequest,
+		MessageIn:                      filterMessageIn,
+		MessageOutAnnouncement:         filterMessageOutAnnouncement,
+		MessageOutResponse:             filterMessageOutResponse,
+		MessageOutTraverse:             filterMessageOutTraverse,
+		MessageOutPing:                 filterMessageOutPing,
+		MessageOutPong:                 filterMessageOutPong,
+		GlobalBlockchainCacheStatistic: filterGlobalBlockchainCacheStatistic,
+		GlobalBlockchainCacheDelete:    filterGlobalBlockchainCacheDelete,
 	}
 
 	backend, status, err := core.Init(userAgent, configFile, filters)
@@ -101,6 +103,7 @@ func main() {
 
 	initStatistics(backend)
 	startStatisticsWebServer(backend)
+	go startKPIs(backend)
 
 	startAPI(backend)
 
