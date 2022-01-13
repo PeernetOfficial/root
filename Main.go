@@ -101,6 +101,8 @@ func main() {
 		os.Exit(status)
 	}
 
+	backend.Stdout.Subscribe(os.Stdout)
+
 	initStatistics(backend)
 	startStatisticsWebServer(backend)
 	go startKPIs(backend)
