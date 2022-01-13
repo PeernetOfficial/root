@@ -54,6 +54,13 @@ func showHelp(output io.Writer) {
 
 func userCommands(backend *core.Backend, input io.Reader, output io.Writer, terminateSignal chan struct{}) {
 	reader := bufio.NewReader(input)
+	monitoredHashes := make(map[string]struct{})
+
+	defer func() { // unmonitor hashes in case of terminate signal
+		for hash := range monitoredHashes {
+			hashMonitorControl([]byte(hash), 1, nil)
+		}
+	}()
 
 	fmt.Fprint(output, appName+" "+core.Version+"\n------------------------------\n")
 	showHelp(output)
@@ -264,7 +271,7 @@ func userCommands(backend *core.Backend, input io.Reader, output io.Writer, term
 		case "log error":
 			fmt.Fprintf(output, "Please choose the target output of error messages:\n0 = Log file (default)\n1 = Command line\n2 = Log file + command line\n3 = None\n")
 			if number, valid, terminate := getUserOptionInt(reader, terminateSignal); valid && number >= 0 && number <= 3 {
-				config.ErrorOutput = number
+				backend.Config.LogTarget = number
 			} else if terminate {
 				return
 			} else {
@@ -314,12 +321,18 @@ func userCommands(backend *core.Backend, input io.Reader, output io.Writer, term
 				break
 			}
 
-			debugCmdConnect(backend, nodeID)
+			debugCmdConnect(backend, nodeID, output)
 
 		case "debug watch searches":
-			fmt.Fprintf(output, "Enable (1) or disable (0) watching of all outgoing DHT searches? (current setting: %t)\n", enableMonitorAll)
+			fmt.Fprintf(output, "Enable (1) or disable (0) watching of all outgoing DHT searches?\n")
 			if number, valid, terminate := getUserOptionInt(reader, terminateSignal); valid && number >= 0 && number <= 1 {
-				enableMonitorAll = number == 1
+				if number == 1 {
+					hashMonitorControl([]byte(keyMonitorAllSearches), 0, output)
+					monitoredHashes[keyMonitorAllSearches] = struct{}{}
+				} else {
+					hashMonitorControl([]byte(keyMonitorAllSearches), 1, output)
+					delete(monitoredHashes, keyMonitorAllSearches)
+				}
 			} else if terminate {
 				return
 			} else {
@@ -327,9 +340,15 @@ func userCommands(backend *core.Backend, input io.Reader, output io.Writer, term
 			}
 
 		case "debug watch incoming":
-			fmt.Fprintf(output, "Enable (1) or disable (0) watching of all incoming information requests? (current setting: %t)\n", enableWatchIncomingAll)
+			fmt.Fprintf(output, "Enable (1) or disable (0) watching of all incoming information requests?\n")
 			if number, valid, terminate := getUserOptionInt(reader, terminateSignal); valid && number >= 0 && number <= 1 {
-				enableWatchIncomingAll = number == 1
+				if number == 1 {
+					hashMonitorControl([]byte(keyMonitorAllRequests), 0, output)
+					monitoredHashes[keyMonitorAllRequests] = struct{}{}
+				} else {
+					hashMonitorControl([]byte(keyMonitorAllRequests), 1, output)
+					delete(monitoredHashes, keyMonitorAllRequests)
+				}
 			} else if terminate {
 				return
 			} else {
@@ -359,10 +378,12 @@ func userCommands(backend *core.Backend, input io.Reader, output io.Writer, term
 				break
 			}
 
-			added := hashMonitorControl(hash, 2)
+			added := hashMonitorControl(hash, 2, output)
 			if added {
+				monitoredHashes[string(hash)] = struct{}{}
 				fmt.Fprintf(output, "The hash was added to the monitoring list.\n")
 			} else {
+				delete(monitoredHashes, string(hash))
 				fmt.Fprintf(output, "The hash was removed from the monitoring list.\n")
 			}
 
@@ -403,7 +424,7 @@ func userCommands(backend *core.Backend, input io.Reader, output io.Writer, term
 				break
 			}
 
-			go transferCompareFile(peer, fileHash)
+			go transferCompareFile(peer, fileHash, output)
 
 		case "get block":
 			fmt.Fprintf(output, "Enter peer ID or node ID:\n")
@@ -441,10 +462,10 @@ func userCommands(backend *core.Backend, input io.Reader, output io.Writer, term
 				break
 			}
 
-			go blockTransfer(peer, uint64(blockNumber))
+			go blockTransfer(peer, uint64(blockNumber), output)
 
 		case "exit":
-			backend.Filters.LogError("userCommands", "graceful exit via user terminal command\n")
+			backend.LogError("userCommands", "graceful exit via user terminal command\n")
 			os.Exit(core.ExitGraceful)
 
 		case "search file":
@@ -455,14 +476,14 @@ func userCommands(backend *core.Backend, input io.Reader, output io.Writer, term
 
 			results := backend.SearchIndex.Search(text)
 			if len(results) == 0 {
-				fmt.Printf("No results found.\n")
+				fmt.Fprintf(output, "No results found.\n")
 				break
 			}
 
 			for _, result := range results {
-				fmt.Printf("- File ID               %s\n", result.FileID.String())
-				fmt.Printf("  Public Key            %s\n", hex.EncodeToString(result.PublicKey.SerializeCompressed()))
-				fmt.Printf("  Block Number          %d\n", result.BlockNumber)
+				fmt.Fprintf(output, "- File ID               %s\n", result.FileID.String())
+				fmt.Fprintf(output, "  Public Key            %s\n", hex.EncodeToString(result.PublicKey.SerializeCompressed()))
+				fmt.Fprintf(output, "  Block Number          %d\n", result.BlockNumber)
 				keywords := ""
 				for n, selector := range result.Selectors {
 					if n > 0 {
@@ -470,8 +491,11 @@ func userCommands(backend *core.Backend, input io.Reader, output io.Writer, term
 					}
 					keywords += selector.Word
 				}
-				fmt.Printf("  Found via keywords    %s\n", keywords)
+				fmt.Fprintf(output, "  Found via keywords    %s\n", keywords)
 			}
+
+		default:
+			fmt.Fprintf(output, "Unknown command.\n")
 		}
 	}
 }
@@ -637,21 +661,6 @@ func GetPeerlistSorted(backend *core.Backend) (peers []*core.PeerInfo) {
 	})
 
 	return peers
-}
-
-// logError handles error messages from core
-func logError(function, format string, v ...interface{}) {
-	switch config.ErrorOutput {
-	case 0:
-		core.DefaultLogError(function, format, v...)
-
-	case 1:
-		fmt.Printf("["+function+"] "+format, v...)
-
-	case 2:
-		core.DefaultLogError(function, format, v...)
-		fmt.Printf("["+function+"] "+format, v...)
-	}
 }
 
 // ---- command-line helper functions ----

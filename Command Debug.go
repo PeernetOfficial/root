@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -20,71 +21,70 @@ import (
 )
 
 // debugCmdConnect connects to the node ID
-func debugCmdConnect(backend *core.Backend, nodeID []byte) {
-	fmt.Printf("---------------- Connect to node %s ----------------\n", hex.EncodeToString(nodeID))
-	defer fmt.Printf("---------------- done node %s ----------------\n", hex.EncodeToString(nodeID))
+func debugCmdConnect(backend *core.Backend, nodeID []byte, output io.Writer) {
+	fmt.Fprintf(output, "---------------- Connect to node %s ----------------\n", hex.EncodeToString(nodeID))
+	defer fmt.Fprintf(output, "---------------- done node %s ----------------\n", hex.EncodeToString(nodeID))
 
 	// in local DHT list?
 	_, peer := backend.IsNodeContact(nodeID)
 	if peer != nil {
-		fmt.Printf("* In local routing table: Yes.\n")
+		fmt.Fprintf(output, "* In local routing table: Yes.\n")
 	} else {
-		fmt.Printf("* In local routing table: No. Lookup via DHT. Timeout = 10 seconds.\n")
+		fmt.Fprintf(output, "* In local routing table: No. Lookup via DHT. Timeout = 10 seconds.\n")
 
-		hashMonitorControl(nodeID, 0)
-		defer hashMonitorControl(nodeID, 1)
+		hashMonitorControl(nodeID, 0, output)
+		defer hashMonitorControl(nodeID, 1, nil)
 
 		// Discovery via DHT.
 		_, peer, _ = backend.FindNode(nodeID, time.Second*10)
 		if peer == nil {
-			fmt.Printf("* Not found via DHT :(\n")
+			fmt.Fprintf(output, "* Not found via DHT :(\n")
 			return
 		}
 
-		fmt.Printf("* Successfully discovered via DHT.\n")
+		fmt.Fprintf(output, "* Successfully discovered via DHT.\n")
 	}
 
-	fmt.Printf("* Peer details:\n")
-	fmt.Printf("  Uncontacted:      %t\n", peer.IsVirtual())
-	fmt.Printf("  Root peer:        %t\n", peer.IsRootPeer)
-	fmt.Printf("  User Agent:       %s\n", peer.UserAgent)
-	fmt.Printf("  Firewall:         %t\n", peer.IsFirewallReported())
+	fmt.Fprintf(output, "* Peer details:\n")
+	fmt.Fprintf(output, "  Uncontacted:      %t\n", peer.IsVirtual())
+	fmt.Fprintf(output, "  Root peer:        %t\n", peer.IsRootPeer)
+	fmt.Fprintf(output, "  User Agent:       %s\n", peer.UserAgent)
+	fmt.Fprintf(output, "  Firewall:         %t\n", peer.IsFirewallReported())
 
 	// virtual peer?
 	if peer.IsVirtual() {
-		fmt.Printf("* Peer is virtual and was not contacted before. Sending out ping.\n")
+		fmt.Fprintf(output, "* Peer is virtual and was not contacted before. Sending out ping.\n")
 		peer.Ping()
 	} else {
-		fmt.Printf("* Connections:\n")
-		fmt.Printf("%s", textPeerConnections(peer))
+		fmt.Fprintf(output, "* Connections:\n")
+		fmt.Fprintf(output, "%s", textPeerConnections(peer))
 	}
 
 	// ping via all connections TODO
-	//fmt.Printf("* Sending ping:\n")
+	//fmt.Fprintf(output, "* Sending ping:\n")
 }
 
 // ---- filter for outgoing DHT searches ----
 
 // debug output of monitored keys searched in the DHT
 
-var monitorKeys map[string]struct{}
+var monitorKeys map[string]io.Writer = make(map[string]io.Writer)
 var monitorKeysMutex sync.RWMutex
-var enableMonitorAll = false // Enables output for all searches. Otherwise it only monitors searches stored in monitorKeys.
 
 // hashMonitorControl adds (0), removes (1), or inverts (2) a hash on the list
-func hashMonitorControl(key []byte, action int) (added bool) {
+func hashMonitorControl(key []byte, action int, output io.Writer) (added bool) {
 	monitorKeysMutex.Lock()
 	defer monitorKeysMutex.Unlock()
 
 	switch action {
 	case 0:
-		monitorKeys[string(key)] = struct{}{}
+		monitorKeys[string(key)] = output
 		added = true
 	case 1:
 		delete(monitorKeys, string(key))
 	case 2:
 		if _, ok := monitorKeys[string(key)]; !ok {
-			monitorKeys[string(key)] = struct{}{}
+			monitorKeys[string(key)] = output
 			added = true
 		} else {
 			delete(monitorKeys, string(key))
@@ -94,15 +94,24 @@ func hashMonitorControl(key []byte, action int) (added bool) {
 	return
 }
 
-func hashIsMonitored(key []byte) (monitored bool) {
+func hashIsMonitored(keys ...[]byte) (monitored bool, output io.Writer) {
 	monitorKeysMutex.Lock()
-	_, monitored = monitorKeys[string(key)]
-	monitorKeysMutex.Unlock()
-	return
+	defer monitorKeysMutex.Unlock()
+
+	for _, key := range keys {
+		if output, monitored = monitorKeys[string(key)]; monitored {
+			return true, output
+		}
+	}
+
+	return false, nil
 }
 
+const keyMonitorAllSearches = "all searches" // special key to monitor all searches
+
 func filterSearchStatus(client *dht.SearchClient, function, format string, v ...interface{}) {
-	if !enableMonitorAll && !hashIsMonitored(client.Key) {
+	monitored, output := hashIsMonitored(client.Key, []byte(keyMonitorAllSearches))
+	if !monitored {
 		return
 	}
 
@@ -122,15 +131,16 @@ func filterSearchStatus(client *dht.SearchClient, function, format string, v ...
 		intend = "  >"
 	}
 
-	fmt.Printf(intend+" "+function+" ["+hex.EncodeToString(keyA)+"] "+format, v...)
+	fmt.Fprintf(output, intend+" "+function+" ["+hex.EncodeToString(keyA)+"] "+format, v...)
 }
 
 // ---- filter for incoming information requests ----
 
-var enableWatchIncomingAll = false
+const keyMonitorAllRequests = "all requests" // special key to monitor all info requests
 
 func filterIncomingRequest(peer *core.PeerInfo, Action int, Key []byte, Info interface{}) {
-	if !enableWatchIncomingAll && !hashIsMonitored(peer.NodeID) {
+	monitored, output := hashIsMonitored(peer.NodeID, []byte(keyMonitorAllRequests))
+	if !monitored {
 		return
 	}
 
@@ -147,16 +157,17 @@ func filterIncomingRequest(peer *core.PeerInfo, Action int, Key []byte, Info int
 	}
 
 	if Action == protocol.ActionFindSelf && bytes.Equal(peer.NodeID, Key) {
-		fmt.Printf("Info request from %s %s\n", hex.EncodeToString(peer.NodeID), requestType)
+		fmt.Fprintf(output, "Info request from %s %s\n", hex.EncodeToString(peer.NodeID), requestType)
 	} else {
-		fmt.Printf("Info request from %s %s for key %s\n", hex.EncodeToString(peer.NodeID), requestType, hex.EncodeToString(Key))
+		fmt.Fprintf(output, "Info request from %s %s for key %s\n", hex.EncodeToString(peer.NodeID), requestType, hex.EncodeToString(Key))
 	}
 }
 
 // ---- filter for incoming and outgoing packets ----
 
 func filterMessageIn(peer *core.PeerInfo, raw *protocol.MessageRaw, message interface{}) {
-	if !hashIsMonitored(peer.NodeID) {
+	monitored, output := hashIsMonitored(peer.NodeID)
+	if !monitored {
 		// TODO: For Announcement/Response also check data, Traverse the final target
 		return
 	}
@@ -180,88 +191,88 @@ func filterMessageIn(peer *core.PeerInfo, raw *protocol.MessageRaw, message inte
 		commandA = "Chat"
 	}
 
-	output := fmt.Sprintf("-------- Node %s Incoming %s --------\n", hex.EncodeToString(peer.NodeID), commandA)
-	output += fmt.Sprintf("Sender Peer ID: %s\n", hex.EncodeToString(peer.PublicKey.SerializeCompressed()))
+	text := fmt.Sprintf("-------- Node %s Incoming %s --------\n", hex.EncodeToString(peer.NodeID), commandA)
+	text += fmt.Sprintf("Sender Peer ID: %s\n", hex.EncodeToString(peer.PublicKey.SerializeCompressed()))
 
 	if !raw.SenderPublicKey.IsEqual(peer.PublicKey) {
-		output += fmt.Sprintf("WARNING: Mismatch of public keys, sender %s and packet indicates %s\n", hex.EncodeToString(peer.PublicKey.SerializeCompressed()), hex.EncodeToString(raw.SenderPublicKey.SerializeCompressed()))
+		text += fmt.Sprintf("WARNING: Mismatch of public keys, sender %s and packet indicates %s\n", hex.EncodeToString(peer.PublicKey.SerializeCompressed()), hex.EncodeToString(raw.SenderPublicKey.SerializeCompressed()))
 	}
 
 	if message == nil {
-		output += "(no message decoded)\n"
+		text += "(no message decoded)\n"
 	} else if announce, ok := message.(*protocol.MessageAnnouncement); ok {
-		output += fmt.Sprintf("Fields:\n  Protocol supported    %d\n", announce.Protocol)
-		output += fmt.Sprintf("  Feature bits          %d\n", announce.Features)
-		output += fmt.Sprintf("  Action bits           %d\n", announce.Actions)
-		output += fmt.Sprintf("  Blockchain Height     %d\n", announce.BlockchainHeight)
-		output += fmt.Sprintf("  Blockchain Version    %d\n", announce.BlockchainVersion)
-		output += fmt.Sprintf("  Port Internal         %d\n", announce.PortInternal)
-		output += fmt.Sprintf("  Port External         %d\n", announce.PortExternal)
-		output += fmt.Sprintf("  User Agent            %s\n", announce.UserAgent)
+		text += fmt.Sprintf("Fields:\n  Protocol supported    %d\n", announce.Protocol)
+		text += fmt.Sprintf("  Feature bits          %d\n", announce.Features)
+		text += fmt.Sprintf("  Action bits           %d\n", announce.Actions)
+		text += fmt.Sprintf("  Blockchain Height     %d\n", announce.BlockchainHeight)
+		text += fmt.Sprintf("  Blockchain Version    %d\n", announce.BlockchainVersion)
+		text += fmt.Sprintf("  Port Internal         %d\n", announce.PortInternal)
+		text += fmt.Sprintf("  Port External         %d\n", announce.PortExternal)
+		text += fmt.Sprintf("  User Agent            %s\n", announce.UserAgent)
 
 		if len(announce.FindPeerKeys) > 0 {
-			output += fmt.Sprintf("FIND_PEER %d records:\n", len(announce.FindPeerKeys))
+			text += fmt.Sprintf("FIND_PEER %d records:\n", len(announce.FindPeerKeys))
 		}
 		for _, find := range announce.FindPeerKeys {
-			output += fmt.Sprintf("    - Find peer %s\n", hex.EncodeToString(find.Hash))
+			text += fmt.Sprintf("    - Find peer %s\n", hex.EncodeToString(find.Hash))
 		}
 		if len(announce.FindDataKeys) > 0 {
-			output += fmt.Sprintf("FIND_VALUE %d records:\n", len(announce.FindDataKeys))
+			text += fmt.Sprintf("FIND_VALUE %d records:\n", len(announce.FindDataKeys))
 		}
 		for _, find := range announce.FindDataKeys {
-			output += fmt.Sprintf("    - Find data %s\n", hex.EncodeToString(find.Hash))
+			text += fmt.Sprintf("    - Find data %s\n", hex.EncodeToString(find.Hash))
 		}
 		if len(announce.InfoStoreFiles) > 0 {
-			output += fmt.Sprintf("INFO_STORE %d records:\n", len(announce.InfoStoreFiles))
+			text += fmt.Sprintf("INFO_STORE %d records:\n", len(announce.InfoStoreFiles))
 		}
 		for _, info := range announce.InfoStoreFiles {
-			output += fmt.Sprintf("    - Info store %s, type %d, size %d\n", hex.EncodeToString(info.ID.Hash), info.Type, info.Size)
+			text += fmt.Sprintf("    - Info store %s, type %d, size %d\n", hex.EncodeToString(info.ID.Hash), info.Type, info.Size)
 		}
 	} else if response, ok := message.(*protocol.MessageResponse); ok {
-		output += fmt.Sprintf("Fields:\n  Protocol supported    %d\n", response.Protocol)
-		output += fmt.Sprintf("  Feature bits          %d\n", response.Features)
-		output += fmt.Sprintf("  Action bits           %d\n", response.Actions)
-		output += fmt.Sprintf("  Blockchain Height     %d\n", response.BlockchainHeight)
-		output += fmt.Sprintf("  Blockchain Version    %d\n", response.BlockchainVersion)
-		output += fmt.Sprintf("  Port Internal         %d\n", response.PortInternal)
-		output += fmt.Sprintf("  Port External         %d\n", response.PortExternal)
-		output += fmt.Sprintf("  User Agent            %s\n", response.UserAgent)
+		text += fmt.Sprintf("Fields:\n  Protocol supported    %d\n", response.Protocol)
+		text += fmt.Sprintf("  Feature bits          %d\n", response.Features)
+		text += fmt.Sprintf("  Action bits           %d\n", response.Actions)
+		text += fmt.Sprintf("  Blockchain Height     %d\n", response.BlockchainHeight)
+		text += fmt.Sprintf("  Blockchain Version    %d\n", response.BlockchainVersion)
+		text += fmt.Sprintf("  Port Internal         %d\n", response.PortInternal)
+		text += fmt.Sprintf("  Port External         %d\n", response.PortExternal)
+		text += fmt.Sprintf("  User Agent            %s\n", response.UserAgent)
 
 		for _, hash := range response.Hash2Peers {
 			isLast := ""
 			if hash.IsLast {
 				isLast = " [last result in sequence]"
 			}
-			output += fmt.Sprintf("    - Peers known for the hash %s%s\n", hex.EncodeToString(hash.ID.Hash), isLast)
+			text += fmt.Sprintf("    - Peers known for the hash %s%s\n", hex.EncodeToString(hash.ID.Hash), isLast)
 			for n := range hash.Closest {
-				output += fmt.Sprintf("      Close peer:\n%s\n", outputPeerRecord(&hash.Closest[n]))
+				text += fmt.Sprintf("      Close peer:\n%s\n", outputPeerRecord(&hash.Closest[n]))
 			}
 			for n := range hash.Storing {
-				output += fmt.Sprintf("      Peer stores:\n%s\n", outputPeerRecord(&hash.Storing[n]))
+				text += fmt.Sprintf("      Peer stores:\n%s\n", outputPeerRecord(&hash.Storing[n]))
 			}
 		}
 		for _, find := range response.FilesEmbed {
-			output += fmt.Sprintf("    - File embedded %s (%d bytes)\n", hex.EncodeToString(find.ID.Hash), len(find.Data))
+			text += fmt.Sprintf("    - File embedded %s (%d bytes)\n", hex.EncodeToString(find.ID.Hash), len(find.Data))
 		}
 		for _, hash := range response.HashesNotFound {
-			output += fmt.Sprintf("    - Hash not found %s\n", hex.EncodeToString(hash))
+			text += fmt.Sprintf("    - Hash not found %s\n", hex.EncodeToString(hash))
 		}
 	} else if traverse, ok := message.(*protocol.MessageTraverse); ok {
-		output += fmt.Sprintf("Fields:\n  Target Peer                     %s\n", hex.EncodeToString(traverse.TargetPeer.SerializeCompressed()))
-		output += fmt.Sprintf("  Authorized Relay Peer           %s\n", hex.EncodeToString(traverse.AuthorizedRelayPeer.SerializeCompressed()))
-		output += fmt.Sprintf("  Signer Public Key               %s\n", hex.EncodeToString(traverse.SignerPublicKey.SerializeCompressed()))
-		output += fmt.Sprintf("  Expires                         %s\n", traverse.Expires.String())
-		output += fmt.Sprintf("  IPv4                            %s\n", traverse.IPv4.String())
-		output += fmt.Sprintf("  Port IPv4                       %d\n", traverse.PortIPv4)
-		output += fmt.Sprintf("  Port IPv4 Reported External     %d\n", traverse.PortIPv4ReportedExternal)
-		output += fmt.Sprintf("  IPv6                            %s\n", traverse.IPv6.String())
-		output += fmt.Sprintf("  Port IPv6                       %d\n", traverse.PortIPv6)
-		output += fmt.Sprintf("  Port IPv6 Reported External     %d\n", traverse.PortIPv6ReportedExternal)
+		text += fmt.Sprintf("Fields:\n  Target Peer                     %s\n", hex.EncodeToString(traverse.TargetPeer.SerializeCompressed()))
+		text += fmt.Sprintf("  Authorized Relay Peer           %s\n", hex.EncodeToString(traverse.AuthorizedRelayPeer.SerializeCompressed()))
+		text += fmt.Sprintf("  Signer Public Key               %s\n", hex.EncodeToString(traverse.SignerPublicKey.SerializeCompressed()))
+		text += fmt.Sprintf("  Expires                         %s\n", traverse.Expires.String())
+		text += fmt.Sprintf("  IPv4                            %s\n", traverse.IPv4.String())
+		text += fmt.Sprintf("  Port IPv4                       %d\n", traverse.PortIPv4)
+		text += fmt.Sprintf("  Port IPv4 Reported External     %d\n", traverse.PortIPv4ReportedExternal)
+		text += fmt.Sprintf("  IPv6                            %s\n", traverse.IPv6.String())
+		text += fmt.Sprintf("  Port IPv6                       %d\n", traverse.PortIPv6)
+		text += fmt.Sprintf("  Port IPv6 Reported External     %d\n", traverse.PortIPv6ReportedExternal)
 	}
 
-	output += "--------\n"
+	text += "--------\n"
 
-	fmt.Printf("%s", output)
+	output.Write([]byte(text))
 }
 
 func outputPeerRecord(record *protocol.PeerRecord) (output string) {
@@ -285,7 +296,8 @@ func outputPeerRecord(record *protocol.PeerRecord) (output string) {
 }
 
 func outputOutgoingMessage(peer *core.PeerInfo, packet *protocol.PacketRaw) {
-	if !hashIsMonitored(peer.NodeID) {
+	monitored, output := hashIsMonitored(peer.NodeID)
+	if !monitored {
 		// TODO: For Announcement/Response also check data, Traverse the final target
 		return
 	}
@@ -309,14 +321,14 @@ func outputOutgoingMessage(peer *core.PeerInfo, packet *protocol.PacketRaw) {
 		commandA = "Chat"
 	}
 
-	output := fmt.Sprintf("-------- Node %s Outgoing %s --------\n", hex.EncodeToString(peer.NodeID), commandA)
-	output += fmt.Sprintf("Receiver Peer ID: %s\n", hex.EncodeToString(peer.PublicKey.SerializeCompressed()))
+	text := fmt.Sprintf("-------- Node %s Outgoing %s --------\n", hex.EncodeToString(peer.NodeID), commandA)
+	text += fmt.Sprintf("Receiver Peer ID: %s\n", hex.EncodeToString(peer.PublicKey.SerializeCompressed()))
 
 	// TODO: Decoding of payload data (done by caller of this function)
 
-	output += "--------\n"
+	text += "--------\n"
 
-	fmt.Printf("%s", output)
+	output.Write([]byte(text))
 }
 
 func filterMessageOutAnnouncement(receiverPublicKey *btcec.PublicKey, peer *core.PeerInfo, packet *protocol.PacketRaw, findSelf bool, findPeer []protocol.KeyHash, findValue []protocol.KeyHash, files []protocol.InfoStore) {

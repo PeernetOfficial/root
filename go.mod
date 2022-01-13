@@ -3,7 +3,7 @@ module github.com/PeernetOfficial/root
 go 1.17
 
 require (
-	github.com/PeernetOfficial/core v0.0.0-20220106031128-5c8b8eb94bd7
+	github.com/PeernetOfficial/core v0.0.0-20220112211834-6a5312d83433
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.1-0.20200912192056-d07530f46e1e
 	github.com/gorilla/websocket v1.4.3-0.20210424162022-e8629af678b7

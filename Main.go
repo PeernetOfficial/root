@@ -35,9 +35,6 @@ var config struct {
 	// DatabaseFolder defines where all the database files are stored. Currently they are uncompressed unencrypted CSV files.
 	DatabaseFolder string `yaml:"DatabaseFolder"`
 
-	// Log settings
-	ErrorOutput int `yaml:"ErrorOutput"` // 0 = Log file (default),  1 = Command line, 2 = Log file + command line, 3 = None
-
 	// API settings
 	APIListen          []string  `yaml:"APIListen"`          // WebListen is in format IP:Port and declares where the web-interface should listen on. IP can also be ommitted to listen on any.
 	APIUseSSL          bool      `yaml:"APIUseSSL"`          // Enables SSL.
@@ -62,15 +59,12 @@ func init() {
 		}
 		os.Exit(status)
 	}
-
-	monitorKeys = make(map[string]struct{})
 }
 
 func main() {
 	userAgent := appName + "/" + core.Version
 
 	filters := &core.Filters{
-		LogError:                       logError,
 		DHTSearchStatus:                filterSearchStatus,
 		IncomingRequest:                filterIncomingRequest,
 		MessageIn:                      filterMessageIn,
