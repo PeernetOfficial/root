@@ -3,7 +3,7 @@ module github.com/PeernetOfficial/root
 go 1.17
 
 require (
-	github.com/PeernetOfficial/core v0.0.0-20220221213520-ee22bf641a08
+	github.com/PeernetOfficial/core v0.0.0-20220224134240-0553c01962a3
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.1-0.20200912192056-d07530f46e1e
 	github.com/gorilla/websocket v1.5.0
@@ -23,7 +23,7 @@ require (
 	github.com/wayneashleyberry/terminal-dimensions v1.1.0 // indirect
 	golang.org/x/crypto v0.0.0-20220214200702-86341886e292 // indirect
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd // indirect
-	golang.org/x/sys v0.0.0-20220222200937-f2425489ef4c // indirect
+	golang.org/x/sys v0.0.0-20220224120231-95c6836cb0e7 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	lukechampine.com/blake3 v1.1.7 // indirect
 )
