@@ -22,6 +22,10 @@ var globalBlockchainStats struct {
 }
 
 func startKPIs(backend *core.Backend) {
+	if backend.GlobalBlockchainCache == nil {
+		return
+	}
+
 	// Go through all blockchains to initialize the stats
 	backend.GlobalBlockchainCache.Store.IterateBlockchains(func(header *blockchain.MultiBlockchainHeader) {
 		if header.Stats.CountFileRecords == 0 && header.Stats.SizeAllFiles == 0 {
